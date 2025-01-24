@@ -35,7 +35,7 @@ This advanced web crawler is a sophisticated Python-based tool designed specific
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/malayalam-web-crawler.git
+git clone https://github.com/jabirjabzz/malayalam-web-crawler.git
 cd malayalam-web-crawler
 ```
 
