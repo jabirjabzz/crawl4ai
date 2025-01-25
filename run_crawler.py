@@ -1,4 +1,3 @@
-# run_crawler.py
 import asyncio
 import logging
 import os
@@ -36,7 +35,9 @@ async def main():
             batch_size=10,
             max_retries=3,
             cache_mode=CacheMode.BYPASS,
-            similarity_threshold=0.9
+            similarity_threshold=0.9,
+            start_index=0,      # Optional: start from first URL
+            end_index=50        # Optional: crawl first 50 URLs
         )
         
         # Ensure output directories exist
@@ -46,7 +47,8 @@ async def main():
         os.makedirs(os.path.join(config.output_dir, 'screenshots'), exist_ok=True)
         
         crawler = MalayalamCrawler(config)
-        await crawler.run()
+        await crawler.run(start_index=config.start_index, 
+                          end_index=config.end_index)
         
         logging.info("Crawling completed successfully!")
     
