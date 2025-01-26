@@ -8,7 +8,6 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 import chardet
 import unicodedata
 import re
-
 from config import CrawlerConfig, CacheMode
 from content_processor import ContentProcessor
 
@@ -24,6 +23,7 @@ class MalayalamCrawler:
             "User-Agent": "MalayalamCrawler/1.0"
         }
         self._setup_directories()
+        self.semaphore = asyncio.Semaphore(self.config.batch_size)  # Limit concurrent requests
         
     def _setup_directories(self) -> None:
         """Create necessary directories if they don't exist."""
@@ -56,42 +56,37 @@ class MalayalamCrawler:
         # Create crawler instance
         async with AsyncWebCrawler() as crawler:
             # Batch processing
-            for i in range(0, len(selected_urls), self.config.batch_size):
-                batch = selected_urls[i:i+self.config.batch_size]
-                await self._process_batch(batch, crawler)
+            tasks = [self._process_url(crawler, url) for url in selected_urls]
+            await asyncio.gather(*tasks)
         
         logging.info(f"Crawling completed. Processed {len(selected_urls)} URLs.")
 
-    async def _process_batch(self, urls: List[str], crawler: AsyncWebCrawler) -> None:
-        """Process a batch of URLs concurrently with Malayalam language support."""
-        browser_config = BrowserConfig(
-            proxy_config=self.config.proxy_config.__dict__ if self.config.proxy_config else None,
-            headless=self.config.headless
-        )
+    async def _process_url(self, crawler: AsyncWebCrawler, url: str) -> None:
+        """Process a single URL with concurrency control."""
+        async with self.semaphore:
+            await self._crawl_url(crawler, url)
 
-        # Updated CrawlerRunConfig without 'storage_state'
-        crawler_config = CrawlerRunConfig(
-            pdf=self.config.pdf_output,
-            screenshot=self.config.screenshot_output,
-            fetch_ssl_certificate=self.config.fetch_ssl,
-            cache_mode=self.config.cache_mode.value,
-            verbose=True
-        )
-
-        # Pass headers directly during URL crawling
-        tasks = [self._crawl_url(crawler, url, crawler_config) for url in urls]
-        await asyncio.gather(*tasks)
-
-
-
-    async def _crawl_url(self, crawler: AsyncWebCrawler, url: str, crawler_config: CrawlerRunConfig) -> None:
+    async def _crawl_url(self, crawler: AsyncWebCrawler, url: str) -> None:
         """Crawl a single URL with Malayalam content handling."""
         for attempt in range(self.config.max_retries):
             try:
+                browser_config = BrowserConfig(
+                    proxy_config=self.config.proxy_config.__dict__ if self.config.proxy_config else None,
+                    headless=self.config.headless
+                )
+
+                crawler_config = CrawlerRunConfig(
+                    pdf=self.config.pdf_output,
+                    screenshot=self.config.screenshot_output,
+                    fetch_ssl_certificate=self.config.fetch_ssl,
+                    cache_mode=self.config.cache_mode.value,
+                    verbose=True,
+                    headers=self.malayalam_headers  # Pass headers here
+                )
+
                 result = await crawler.arun(url=url, config=crawler_config)
                 
                 if result.success and result.markdown:
-                    # Handle Malayalam text encoding
                     content = self._handle_malayalam_encoding(result.markdown)
                     cleaned_content = self.content_processor.clean_markdown(content)
                     
@@ -99,7 +94,6 @@ class MalayalamCrawler:
                         filename = f"{self._url_to_filename(url)}.md"
                         filepath = os.path.join(self.config.markdown_dir, filename)
                         
-                        # Save with proper encoding for Malayalam
                         with open(filepath, 'w', encoding='utf-8') as f:
                             f.write(cleaned_content)
                         
@@ -118,14 +112,10 @@ class MalayalamCrawler:
     def _handle_malayalam_encoding(self, content: str) -> str:
         """Handle Malayalam text encoding issues."""
         try:
-            # Detect the encoding if it's bytes
             if isinstance(content, bytes):
                 detected = chardet.detect(content)
                 content = content.decode(detected['encoding'] or 'utf-8')
-            
-            # Normalize Malayalam text
             return unicodedata.normalize('NFC', content)
-            
         except Exception as e:
             logging.error(f"Error handling Malayalam encoding: {str(e)}")
             return content
@@ -133,6 +123,5 @@ class MalayalamCrawler:
     @staticmethod
     def _url_to_filename(url: str) -> str:
         """Convert URL to a safe filename, preserving Malayalam characters."""
-        # Keep Malayalam characters while replacing unsafe characters
         safe_name = re.sub(r'[^\w\u0D00-\u0D7F\-_]', '_', url)
         return safe_name[:200]
