@@ -122,6 +122,7 @@ class MalayalamCrawler:
 
     @staticmethod
     def _url_to_filename(url: str) -> str:
-        """Convert URL to a safe filename, preserving Malayalam characters."""
+        import hashlib
         safe_name = re.sub(r'[^\w\u0D00-\u0D7F\-_]', '_', url)
-        return safe_name[:200]
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+        return f"{safe_name[:100]}_{url_hash}"

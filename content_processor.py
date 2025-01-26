@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 class ContentProcessor:
-    def __init__(self, similarity_threshold: float = 0.85):
+    def __init__(self, similarity_threshold: float = 0.7):
         self.similarity_threshold = similarity_threshold
         self.vectorizer = TfidfVectorizer(stop_words='english')
         self.processed_contents: List[str] = []
