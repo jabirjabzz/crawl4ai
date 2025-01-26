@@ -1,4 +1,3 @@
-# config.py
 import os
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List
@@ -6,9 +5,9 @@ from enum import Enum
 
 class CacheMode(Enum):
     """Defines how caching should be handled during crawling."""
-    BYPASS = "bypass"        # Ignore cache completely
-    USE_CACHE = "use_cache"  # Use existing cache if available
-    UPDATE_CACHE = "update_cache"  # Update cache with new data
+    BYPASS = "bypass"        
+    USE_CACHE = "use_cache"  
+    UPDATE_CACHE = "update_cache"  
 
 @dataclass
 class ProxyConfig:
@@ -16,8 +15,8 @@ class ProxyConfig:
     server: str
     username: Optional[str] = None
     password: Optional[str] = None
-    country: Optional[str] = None  # Additional country info
-    anonymity_level: Optional[str] = None  # High, Medium, Low
+    country: Optional[str] = None
+    anonymity_level: Optional[str] = None
 
 @dataclass
 class CrawlerConfig:
@@ -33,7 +32,8 @@ class CrawlerConfig:
     
     # Proxy and Network Settings
     proxy_list_path: Optional[str] = "good_proxies.txt"
-    proxy_rotation_strategy: str = "round_robin"  # Other strategies: random, weighted
+    proxy_rotation_strategy: str = "round_robin"
+    proxy_config: Optional[ProxyConfig] = None
     
     # Browser and Crawling Configurations
     headless: bool = True
@@ -66,7 +66,6 @@ class CrawlerConfig:
     def _validate_proxy(self, proxy: str) -> bool:
         """Basic proxy validation."""
         try:
-            # Check if proxy is in correct format (IP:PORT)
             ip, port = proxy.split(':')
             int(port)  # Ensure port is a number
             return True

@@ -3,11 +3,11 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from base64 import b64decode
+from typing import List, Dict, Optional
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 import chardet
+import unicodedata
+import re
 
 from config import CrawlerConfig, CacheMode
 from content_processor import ContentProcessor
@@ -34,22 +34,23 @@ class MalayalamCrawler:
         if self.config.screenshot_output:
             os.makedirs(os.path.join(self.config.output_dir, 'screenshots'), exist_ok=True)
 
-    async def run(self, start_index: int = 0, end_index: Optional[int] = None):
+    async def run(self, start_index: Optional[int] = None, end_index: Optional[int] = None):
         """
         Run crawler with optional URL range selection
         
         Args:
-            start_index (int): Starting index of URLs to crawl
+            start_index (Optional[int]): Starting index of URLs to crawl
             end_index (Optional[int]): Ending index of URLs to crawl
         """
         # Load URLs from JSON
         with open(self.config.input_json_path, 'r') as f:
             urls = json.load(f)
         
-        # Apply range selection
-        if end_index is None:
-            end_index = len(urls)
+        # Use config values if not provided
+        start_index = start_index if start_index is not None else self.config.start_index
+        end_index = end_index if end_index is not None else self.config.end_index or len(urls)
         
+        # Apply range selection
         selected_urls = urls[start_index:end_index]
         
         # Create crawler instance
@@ -58,28 +59,30 @@ class MalayalamCrawler:
             for i in range(0, len(selected_urls), self.config.batch_size):
                 batch = selected_urls[i:i+self.config.batch_size]
                 await self._process_batch(batch, crawler)
+        
+        logging.info(f"Crawling completed. Processed {len(selected_urls)} URLs.")
 
     async def _process_batch(self, urls: List[str], crawler: AsyncWebCrawler) -> None:
         """Process a batch of URLs concurrently with Malayalam language support."""
         browser_config = BrowserConfig(
             proxy_config=self.config.proxy_config.__dict__ if self.config.proxy_config else None,
-            headless=self.config.headless,
-            args=['--font-render-hinting=medium', '--lang=ml']
+            headless=self.config.headless
         )
 
+        # Updated CrawlerRunConfig without 'storage_state'
         crawler_config = CrawlerRunConfig(
             pdf=self.config.pdf_output,
             screenshot=self.config.screenshot_output,
             fetch_ssl_certificate=self.config.fetch_ssl,
             cache_mode=self.config.cache_mode.value,
-            headers={**self.malayalam_headers, **(self.config.custom_headers or {})},
-            storage_state=self.config.storage_state,
             verbose=True
         )
 
-        # Create tasks for concurrent processing
+        # Pass headers directly during URL crawling
         tasks = [self._crawl_url(crawler, url, crawler_config) for url in urls]
         await asyncio.gather(*tasks)
+
+
 
     async def _crawl_url(self, crawler: AsyncWebCrawler, url: str, crawler_config: CrawlerRunConfig) -> None:
         """Crawl a single URL with Malayalam content handling."""
@@ -121,7 +124,6 @@ class MalayalamCrawler:
                 content = content.decode(detected['encoding'] or 'utf-8')
             
             # Normalize Malayalam text
-            import unicodedata
             return unicodedata.normalize('NFC', content)
             
         except Exception as e:
@@ -131,7 +133,6 @@ class MalayalamCrawler:
     @staticmethod
     def _url_to_filename(url: str) -> str:
         """Convert URL to a safe filename, preserving Malayalam characters."""
-        import re
         # Keep Malayalam characters while replacing unsafe characters
         safe_name = re.sub(r'[^\w\u0D00-\u0D7F\-_]', '_', url)
         return safe_name[:200]

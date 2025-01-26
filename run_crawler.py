@@ -28,7 +28,7 @@ async def main():
     
     try:
         config = CrawlerConfig(
-            input_json_path="malayalam_urls.json",
+            input_json_path=r"C:\Users\Administrator\Documents\GitHub\Malayalam-Language-Scraping\output_URLs\processed_urls.json",
             output_dir="output",
             markdown_dir="malayalam_output",
             proxy_list_path="good_proxies.txt",

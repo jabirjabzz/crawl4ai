@@ -1,6 +1,8 @@
 # content_processor.py
 import re
-from typing import List, Set
+import logging
+import unicodedata
+from typing import List
 from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -13,39 +15,45 @@ class ContentProcessor:
         self.processed_contents: List[str] = []
         self.processed_vectors = None
         
-    def clean_markdown(self, content: str) -> str:
-        """Clean and preprocess markdown content."""
-        # Remove HTML/XML tags
+    def clean_malayalam_content(self, content: str) -> str:
+        """Comprehensive cleaning for Malayalam content."""
+        # Remove HTML tags
         soup = BeautifulSoup(content, 'html.parser')
-        text = soup.get_text()
+        text = soup.get_text(separator=' ')
         
-        # Remove extra whitespace and normalize newlines
+        # Normalize Unicode for Malayalam
+        text = unicodedata.normalize('NFC', text)
+        
+        # Remove extra whitespaces
         text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'\n\s*\n', '\n\n', text)
         
-        # Remove special characters but keep markdown formatting
-        text = re.sub(r'[^\w\s\-_*#>\[\](){}.,;:!?]', '', text)
+        # Optional: Remove non-Malayalam characters if needed
+        text = re.sub(r'[^\u0D00-\u0D7F\s]', '', text)
         
         return text.strip()
     
     def is_duplicate_content(self, content: str) -> bool:
         """Check if content is similar to previously processed content."""
         if not self.processed_contents:
+            logging.info("No previous content to compare with.")
             return False
-            
+
+        # Fit the vectorizer if it hasn't been fitted yet
+        if self.processed_vectors is None:
+            logging.info("Fitting TF-IDF vectorizer on processed contents.")
+            self.processed_vectors = self.vectorizer.fit_transform(self.processed_contents)
+
         # Vectorize new content
         new_vector = self.vectorizer.transform([content])
-        
-        if self.processed_vectors is None:
-            self.processed_vectors = self.vectorizer.transform(self.processed_contents)
-        
+
         # Calculate similarities
         similarities = cosine_similarity(new_vector, self.processed_vectors)
         max_similarity = np.max(similarities)
-        
+
+        logging.info(f"Max similarity with previous content: {max_similarity}")
         return max_similarity > self.similarity_threshold
     
     def add_content(self, content: str) -> None:
-        """Add content to processed contents and update vectors."""
+        """Add processed content to tracked contents."""
         self.processed_contents.append(content)
-        self.processed_vectors = None  # Reset vectors to be recalculated
+        self.processed_vectors = None
