@@ -70,48 +70,45 @@ class MalayalamCrawler:
         """Crawl a single URL with Malayalam content handling."""
         for attempt in range(self.config.max_retries):
             try:
-                # Define browser configuration
-                browser_config = BrowserConfig(
-                    proxy_config=self.config.proxy_config.__dict__ if self.config.proxy_config else None,
-                    headless=self.config.headless
-                )
-
                 # Define crawler run configuration
                 crawler_config = CrawlerRunConfig(
                     pdf=self.config.pdf_output,
                     screenshot=self.config.screenshot_output,
                     fetch_ssl_certificate=self.config.fetch_ssl,
                     cache_mode=self.config.cache_mode.value,
-                    verbose=True,
-                    headers=self.malayalam_headers  # Pass headers here
+                    verbose=True
                 )
 
-                # Run the crawler
-                result = await crawler.arun(url=url, config=crawler_config)
+                # Run the crawler with custom headers
+                result = await crawler.arun(
+                    url=url, 
+                    config=crawler_config, 
+                    headers=self.malayalam_headers
+                )
                 
                 # Check if the crawl was successful
                 if result.success:
-                    # Save PDF if enabled and available
+                    # Save PDF if available
                     if self.config.pdf_output and result.pdf:
                         pdf_filename = f"{self._url_to_filename(url)}.pdf"
                         pdf_path = os.path.join(self.config.output_dir, 'pdfs', pdf_filename)
                         with open(pdf_path, 'wb') as f:
-                            f.write(result.pdf)
+                            f.write(result.pdf if isinstance(result.pdf, bytes) else result.pdf.encode('utf-8'))
                         logging.info(f"PDF saved: {pdf_path}")
-                    
-                    # Save screenshot if enabled and available
+
+                    # Save screenshot if available
                     if self.config.screenshot_output and result.screenshot:
                         screenshot_filename = f"{self._url_to_filename(url)}.png"
                         screenshot_path = os.path.join(self.config.output_dir, 'screenshots', screenshot_filename)
                         with open(screenshot_path, 'wb') as f:
-                            f.write(result.screenshot)
+                            f.write(result.screenshot if isinstance(result.screenshot, bytes) else result.screenshot.encode('utf-8'))
                         logging.info(f"Screenshot saved: {screenshot_path}")
-                    
+
                     # Save markdown content if available
                     if result.markdown:
                         content = self._handle_malayalam_encoding(result.markdown)
                         cleaned_content = self.content_processor.clean_markdown(content)
-                        
+
                         # Check for duplicate content
                         if not self.content_processor.is_duplicate_content(cleaned_content):
                             markdown_filename = f"{self._url_to_filename(url)}.md"
@@ -123,12 +120,13 @@ class MalayalamCrawler:
                         else:
                             logging.info(f"Skipped duplicate content from {url}")
                     break  # Exit retry loop if successful
-                        
+                    
             except Exception as e:
                 logging.error(f"Error processing {url} (attempt {attempt + 1}/{self.config.max_retries}): {str(e)}")
                 if attempt == self.config.max_retries - 1:
                     logging.error(f"Max retries reached for {url}")
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
+
 
     def _handle_malayalam_encoding(self, content: str) -> str:
         """Handle Malayalam text encoding issues."""

@@ -1,4 +1,3 @@
-# content_processor.py
 import re
 import logging
 import unicodedata
@@ -31,6 +30,18 @@ class ContentProcessor:
         text = re.sub(r'[^\u0D00-\u0D7F\s]', '', text)
         
         return text.strip()
+    
+    def clean_markdown(self, content: str) -> str:
+        """Clean markdown content."""
+        # Remove markdown-specific syntax
+        content = re.sub(r'#+\s*', '', content)  # Remove headers
+        content = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', content)  # Remove links
+        content = re.sub(r'`{1,3}[^`\n]+`{1,3}', '', content)  # Remove inline code
+        
+        # Use existing Malayalam content cleaning
+        cleaned_content = self.clean_malayalam_content(content)
+        
+        return cleaned_content
     
     def is_duplicate_content(self, content: str) -> bool:
         """Check if content is similar to previously processed content."""
