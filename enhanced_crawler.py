@@ -18,7 +18,7 @@ class MalayalamCrawler:
             similarity_threshold=config.similarity_threshold
         )
         self.malayalam_headers = {
-            "Accept-Language": "ml-IN,ml;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Language": "ml-IN,ml;q=0.7,en-US;q=0.7,en;q=0.7",
             "Content-Language": "ml",
             "User-Agent": "MalayalamCrawler/1.0"
         }
@@ -70,11 +70,13 @@ class MalayalamCrawler:
         """Crawl a single URL with Malayalam content handling."""
         for attempt in range(self.config.max_retries):
             try:
+                # Define browser configuration
                 browser_config = BrowserConfig(
                     proxy_config=self.config.proxy_config.__dict__ if self.config.proxy_config else None,
                     headless=self.config.headless
                 )
 
+                # Define crawler run configuration
                 crawler_config = CrawlerRunConfig(
                     pdf=self.config.pdf_output,
                     screenshot=self.config.screenshot_output,
@@ -84,25 +86,44 @@ class MalayalamCrawler:
                     headers=self.malayalam_headers  # Pass headers here
                 )
 
+                # Run the crawler
                 result = await crawler.arun(url=url, config=crawler_config)
                 
-                if result.success and result.markdown:
-                    content = self._handle_malayalam_encoding(result.markdown)
-                    cleaned_content = self.content_processor.clean_markdown(content)
+                # Check if the crawl was successful
+                if result.success:
+                    # Save PDF if enabled and available
+                    if self.config.pdf_output and result.pdf:
+                        pdf_filename = f"{self._url_to_filename(url)}.pdf"
+                        pdf_path = os.path.join(self.config.output_dir, 'pdfs', pdf_filename)
+                        with open(pdf_path, 'wb') as f:
+                            f.write(result.pdf)
+                        logging.info(f"PDF saved: {pdf_path}")
                     
-                    if not self.content_processor.is_duplicate_content(cleaned_content):
-                        filename = f"{self._url_to_filename(url)}.md"
-                        filepath = os.path.join(self.config.markdown_dir, filename)
-                        
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            f.write(cleaned_content)
-                        
-                        self.content_processor.add_content(cleaned_content)
-                        logging.info(f"Successfully saved Malayalam content from {url}")
-                    else:
-                        logging.info(f"Skipped duplicate Malayalam content from {url}")
-                    break
+                    # Save screenshot if enabled and available
+                    if self.config.screenshot_output and result.screenshot:
+                        screenshot_filename = f"{self._url_to_filename(url)}.png"
+                        screenshot_path = os.path.join(self.config.output_dir, 'screenshots', screenshot_filename)
+                        with open(screenshot_path, 'wb') as f:
+                            f.write(result.screenshot)
+                        logging.info(f"Screenshot saved: {screenshot_path}")
                     
+                    # Save markdown content if available
+                    if result.markdown:
+                        content = self._handle_malayalam_encoding(result.markdown)
+                        cleaned_content = self.content_processor.clean_markdown(content)
+                        
+                        # Check for duplicate content
+                        if not self.content_processor.is_duplicate_content(cleaned_content):
+                            markdown_filename = f"{self._url_to_filename(url)}.md"
+                            markdown_path = os.path.join(self.config.markdown_dir, markdown_filename)
+                            with open(markdown_path, 'w', encoding='utf-8') as f:
+                                f.write(cleaned_content)
+                            self.content_processor.add_content(cleaned_content)
+                            logging.info(f"Markdown saved: {markdown_path}")
+                        else:
+                            logging.info(f"Skipped duplicate content from {url}")
+                    break  # Exit retry loop if successful
+                        
             except Exception as e:
                 logging.error(f"Error processing {url} (attempt {attempt + 1}/{self.config.max_retries}): {str(e)}")
                 if attempt == self.config.max_retries - 1:

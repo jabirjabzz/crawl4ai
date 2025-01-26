@@ -26,7 +26,7 @@ class CrawlerConfig:
     markdown_dir: str = "markdown_output"
     
     # Crawling Parameters
-    batch_size: int = 5
+    batch_size: int = 10
     start_index: int = 0
     end_index: Optional[int] = None
     
@@ -49,8 +49,8 @@ class CrawlerConfig:
     })
     
     storage_state: Optional[str] = None
-    similarity_threshold: float = 0.85
-    max_retries: int = 3
+    similarity_threshold: float = 0.7
+    max_retries: int = 5
     timeout: int = 30
     
     def load_proxies(self) -> List[str]:
