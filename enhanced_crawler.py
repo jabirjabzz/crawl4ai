@@ -9,26 +9,55 @@ import chardet
 import unicodedata
 import re
 from config import CrawlerConfig, CacheMode
-from content_processor import ContentProcessor
+from content_processor import AdvancedContentProcessor  # Updated import
 
 class MalayalamCrawler:
     def __init__(self, config: CrawlerConfig):
+        """
+        Initialize the Malayalam web crawler with advanced configuration
+        
+        Key Components:
+        - Configurable crawling parameters
+        - Advanced content processing
+        - Multilingual headers
+        - Concurrent processing support
+        """
         self.config = config
-        self.content_processor = ContentProcessor(
+        
+        # Use the Advanced Content Processor for intelligent extraction
+        self.content_processor = AdvancedContentProcessor(
             similarity_threshold=config.similarity_threshold
         )
-        self.malayalam_headers = {
-            "Accept-Language": "ml-IN,ml;q=0.7,en-US;q=0.7,en;q=0.7",
-            "Content-Language": "ml",
-            "User-Agent": "MalayalamCrawler/1.0"
-        }
-        self._setup_directories()
-        self.semaphore = asyncio.Semaphore(self.config.batch_size)  # Limit concurrent requests
         
+        # Enhanced malayalam-specific headers
+        self.malayalam_headers = {
+            "Accept-Language": "ml-IN,ml;q=0.9,en-US;q=0.3",
+            "Content-Language": "ml",
+            "User-Agent": "MalayalamContentExtractor/2.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+        
+        # Setup necessary directories
+        self._setup_directories()
+        
+        # Concurrency control
+        self.semaphore = asyncio.Semaphore(self.config.batch_size)
+        
+        # Logging setup
+        self.logger = logging.getLogger(__name__)
+
     def _setup_directories(self) -> None:
-        """Create necessary directories if they don't exist."""
+        """
+        Create output directories with clear, organized structure
+        
+        Ensures consistent directory layout for:
+        - Markdown output
+        - Optional PDF and screenshot storage
+        """
         os.makedirs(self.config.output_dir, exist_ok=True)
         os.makedirs(self.config.markdown_dir, exist_ok=True)
+        
+        # Optional output directories
         if self.config.pdf_output:
             os.makedirs(os.path.join(self.config.output_dir, 'pdfs'), exist_ok=True)
         if self.config.screenshot_output:
@@ -36,41 +65,55 @@ class MalayalamCrawler:
 
     async def run(self, start_index: Optional[int] = None, end_index: Optional[int] = None):
         """
-        Run crawler with optional URL range selection
+        Orchestrate the web crawling process
         
-        Args:
-            start_index (Optional[int]): Starting index of URLs to crawl
-            end_index (Optional[int]): Ending index of URLs to crawl
+        Features:
+        - Flexible URL range selection
+        - Batch processing
+        - Error resilience
         """
-        # Load URLs from JSON
-        with open(self.config.input_json_path, 'r') as f:
+        # Load URLs from configuration file
+        with open(self.config.input_json_path, 'r', encoding='utf-8') as f:
             urls = json.load(f)
         
-        # Use config values if not provided
+        # Apply default or specified URL range
         start_index = start_index if start_index is not None else self.config.start_index
         end_index = end_index if end_index is not None else self.config.end_index or len(urls)
         
-        # Apply range selection
         selected_urls = urls[start_index:end_index]
         
-        # Create crawler instance
+        # Concurrent crawling using AsyncWebCrawler
         async with AsyncWebCrawler() as crawler:
-            # Batch processing
             tasks = [self._process_url(crawler, url) for url in selected_urls]
             await asyncio.gather(*tasks)
         
-        logging.info(f"Crawling completed. Processed {len(selected_urls)} URLs.")
+        self.logger.info(f"Crawling completed. Processed {len(selected_urls)} URLs.")
 
     async def _process_url(self, crawler: AsyncWebCrawler, url: str) -> None:
-        """Process a single URL with concurrency control."""
+        """
+        Process a single URL with concurrency and error handling
+        
+        Ensures:
+        - Controlled concurrent processing
+        - Retry mechanism
+        - Comprehensive error logging
+        """
         async with self.semaphore:
             await self._crawl_url(crawler, url)
 
     async def _crawl_url(self, crawler: AsyncWebCrawler, url: str) -> None:
-        """Crawl a single URL with Malayalam content handling."""
+        """
+        Advanced URL crawling with intelligent content extraction
+        
+        Key Features:
+        - Robust error handling
+        - Configurable crawling parameters
+        - Intelligent content filtering
+        - Optional PDF and screenshot capture
+        """
         for attempt in range(self.config.max_retries):
             try:
-                # Define crawler run configuration
+                # Crawler configuration with fine-tuned parameters
                 crawler_config = CrawlerRunConfig(
                     pdf=self.config.pdf_output,
                     screenshot=self.config.screenshot_output,
@@ -79,68 +122,70 @@ class MalayalamCrawler:
                     verbose=True
                 )
 
-                # Run the crawler with custom headers
+                # Execute web crawling with custom headers
                 result = await crawler.arun(
                     url=url, 
                     config=crawler_config, 
                     headers=self.malayalam_headers
                 )
                 
-                # Check if the crawl was successful
+                # Process successful crawl
                 if result.success:
-                    # Save PDF if available
+                    # Process markdown content
+                    if result.markdown:
+                        processed_content = self.content_processor.process_webpage_content(url, result.markdown)
+                        
+                        # Save high-quality content
+                        if processed_content:
+                            markdown_filename = f"{self._url_to_filename(url)}.md"
+                            markdown_path = os.path.join(self.config.markdown_dir, markdown_filename)
+                            
+                            with open(markdown_path, 'w', encoding='utf-8') as f:
+                                f.write(processed_content)
+                            
+                            self.logger.info(f"High-quality markdown saved: {markdown_path}")
+                        else:
+                            self.logger.info(f"No high-quality content extracted from: {url}")
+
+                    # Optional: PDF and Screenshot handling
                     if self.config.pdf_output and result.pdf:
                         pdf_filename = f"{self._url_to_filename(url)}.pdf"
                         pdf_path = os.path.join(self.config.output_dir, 'pdfs', pdf_filename)
+                        
                         with open(pdf_path, 'wb') as f:
                             f.write(result.pdf if isinstance(result.pdf, bytes) else result.pdf.encode('utf-8'))
-                        logging.info(f"PDF saved: {pdf_path}")
+                        
+                        self.logger.info(f"PDF saved: {pdf_path}")
 
-                    # Save screenshot if available
                     if self.config.screenshot_output and result.screenshot:
                         screenshot_filename = f"{self._url_to_filename(url)}.png"
                         screenshot_path = os.path.join(self.config.output_dir, 'screenshots', screenshot_filename)
+                        
                         with open(screenshot_path, 'wb') as f:
                             f.write(result.screenshot if isinstance(result.screenshot, bytes) else result.screenshot.encode('utf-8'))
-                        logging.info(f"Screenshot saved: {screenshot_path}")
+                        
+                        self.logger.info(f"Screenshot saved: {screenshot_path}")
 
-                    # Save markdown content if available
-                    if result.markdown:
-                        content = self._handle_malayalam_encoding(result.markdown)
-                        cleaned_content = self.content_processor.clean_markdown(content)
-
-                        # Check for duplicate content
-                        if not self.content_processor.is_duplicate_content(cleaned_content):
-                            markdown_filename = f"{self._url_to_filename(url)}.md"
-                            markdown_path = os.path.join(self.config.markdown_dir, markdown_filename)
-                            with open(markdown_path, 'w', encoding='utf-8') as f:
-                                f.write(cleaned_content)
-                            self.content_processor.add_content(cleaned_content)
-                            logging.info(f"Markdown saved: {markdown_path}")
-                        else:
-                            logging.info(f"Skipped duplicate content from {url}")
-                    break  # Exit retry loop if successful
+                break  # Successful processing, exit retry loop
                     
             except Exception as e:
-                logging.error(f"Error processing {url} (attempt {attempt + 1}/{self.config.max_retries}): {str(e)}")
+                self.logger.error(f"Error processing {url} (attempt {attempt + 1}/{self.config.max_retries}): {str(e)}")
+                
                 if attempt == self.config.max_retries - 1:
-                    logging.error(f"Max retries reached for {url}")
+                    self.logger.error(f"Max retries reached for {url}")
+                
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
-
-
-    def _handle_malayalam_encoding(self, content: str) -> str:
-        """Handle Malayalam text encoding issues."""
-        try:
-            if isinstance(content, bytes):
-                detected = chardet.detect(content)
-                content = content.decode(detected['encoding'] or 'utf-8')
-            return unicodedata.normalize('NFC', content)
-        except Exception as e:
-            logging.error(f"Error handling Malayalam encoding: {str(e)}")
-            return content
 
     @staticmethod
     def _url_to_filename(url: str) -> str:
+        """
+        Generate safe, unique filenames from URLs
+        
+        Ensures:
+        - URL-safe characters
+        - Consistent naming convention
+        - Prevents filename conflicts
+        """
         import hashlib
         safe_name = re.sub(r'[^\w\u0D00-\u0D7F\-_]', '_', url)
         url_hash = hashlib.md5(url.encode()).hexdigest()[:8]

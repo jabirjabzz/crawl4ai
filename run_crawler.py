@@ -31,15 +31,15 @@ async def main():
             input_json_path=r"C:\Users\Administrator\Documents\GitHub\Malayalam-Language-Scraping\output_URLs\processed_urls.json",
             output_dir="output",
             markdown_dir="malayalam_output",
-            proxy_list_path="good_proxies.txt",
+            pdf_output=False,  # Disable PDF if not needed
+            screenshot_output=False,  # Disable screenshots if not needed
             batch_size=10,
             max_retries=3,
             cache_mode=CacheMode.BYPASS,
             similarity_threshold=0.9,
-            start_index=0,      # Optional: start from first URL
-            end_index=50        # Optional: crawl first 50 URLs
+            start_index=0,
+            end_index=50
         )
-        
         # Ensure output directories exist
         os.makedirs(config.output_dir, exist_ok=True)
         os.makedirs(config.markdown_dir, exist_ok=True)
