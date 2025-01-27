@@ -8,6 +8,7 @@ class CacheMode(Enum):
     BYPASS = "bypass"        
     USE_CACHE = "use_cache"  
     UPDATE_CACHE = "update_cache"  
+    
 
 @dataclass
 class ProxyConfig:
@@ -18,9 +19,10 @@ class ProxyConfig:
     country: Optional[str] = None
     anonymity_level: Optional[str] = None
 
+
 @dataclass
 class CrawlerConfig:
-    """Comprehensive configuration for web crawler."""
+    json_output_path: str = "malayalam_data.json"
     input_json_path: str = "urls.json"
     output_dir: str = "output"
     markdown_dir: str = "markdown_output"
